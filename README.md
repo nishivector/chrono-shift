@@ -1,34 +1,64 @@
-# Neural Net Nomads
+# Chrono Shift
 
-## Game Description
+A puzzle-platformer where you control two characters in different time periods simultaneously. Navigate through temporal puzzles by coordinating actions between the past and present.
 
-"Neural Net Nomads" is a text-based survival/crafting game set in a post-AI singularity world. Players embody digital consciousnesses uploaded to a vast, ever-changing neural network after a catastrophic AI event. Your goal is to navigate this abstract digital landscape, gathering `Code Fragments` and `Energy`, crafting essential `tools` from code, and defending against rogue algorithms to survive and potentially find a way to manifest back into a physical form or a new digital paradise.
+## 🎮 Play Online
+
+**Live Game:** https://nishivector.github.io/chrono-shift/
+
+**Repository:** https://github.com/nishivector/chrono-shift
 
 ## How to Play
 
-1.  **Run the game:** `python game.py`
-2.  **Explore:** Type `explore` to search your current location for resources and potential threats.
-3.  **Craft:** Type `craft [item]` (e.g., `craft basic_tool`) to create items from your collected resources. Use `recipes` to see available crafts and their costs.
-4.  **Move:** Type `move [Location Name]` (e.g., `move Data Stream`) to travel to different nodes in the network. Be aware of your surroundings!
-5.  **Meditate:** Type `meditate` to regain health at the cost of some energy.
-6.  **Quit:** Type `quit` to exit the game.
+### Controls
+- **1** - Switch to Past timeline
+- **2** - Switch to Present timeline
+- **Tab** - Toggle between timelines
+- **WASD / Arrow Keys** - Move left/right
+- **Space** - Jump
+- **R** - Restart level
 
-## Features Implemented
+### Mobile Controls
+- Use on-screen buttons for touch play
+- Left/Right arrows for movement
+- Switch button to change timeline
+- Jump button to jump
 
-*   Basic resource gathering (`Code Fragments`, `Energy`)
-*   Crafting system with known recipes
-*   Exploration of different network nodes
-*   Simple combat encounters with rogue algorithms
-*   Health and energy management, including meditation for healing
-*   Clear status display
-*   Robust command parsing for multi-word locations
+### Game Mechanics
 
-## Future Enhancements (Ideas)
+**Dual Timeline Control:**
+You control two characters simultaneously - one in the past, one in the present. Each timeline has different physics:
+- **Past:** Floaty, relaxed movement
+- **Present:** Precise, snappy movement
 
-*   More complex crafting recipes and items
-*   Deeper combat system with choices (e.g., fight, flee, hack)
-*   Inventory management
-*   Persistent world or saved game state
-*   Story elements and objectives
-*   Different types of enemies with unique abilities
-*   Character progression/upgrades
+**Temporal Sync:**
+When both characters occupy the same horizontal position, they become "synchronized." Synchronized platforms glow green and allow you to solve puzzles that require cooperation between timelines.
+
+**Objective:**
+Reach the exit portal in both timelines to complete each level.
+
+## Levels
+
+1. **Tutorial** - Learn basic movement in both timelines
+2. **Jump Timing** - Master timing your jumps across timelines  
+3. **Sync Gates** - Your first synchronization puzzle
+4. **Platform Cooperation** - Use one timeline to help the other
+5. **Final Challenge** - Complex temporal puzzle
+
+## Features
+
+- 🎨 Distinctive visual style with sepia (past) vs digital (present) aesthetics
+- ✨ Particle effects and smooth animations
+- 📱 Mobile-friendly with touch controls
+- 🖥️ Responsive design for all screen sizes
+- 🌐 No dependencies - runs directly in browser
+
+## Technology
+
+- Pure HTML5 Canvas
+- Vanilla JavaScript
+- No external frameworks or libraries
+
+## License
+
+MIT License

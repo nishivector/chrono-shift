@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Chrono Shift</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Special+Elite&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #0a0a0f;
+            overflow: hidden;
+            font-family: 'Orbitron', monospace;
+            touch-action: none;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        canvas {
+            display: block;
+            max-width: 100%;
+            max-height: 100%;
+        }
+        
+        #ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        .timeline-indicator {
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: all 0.3s ease;
+        }
+        
+        .timeline-past {
+            background: rgba(184, 134, 11, 0.3);
+            border: 2px solid #b8860b;
+            color: #ffd700;
+        }
+        
+        .timeline-present {
+            background: rgba(0, 191, 255, 0.3);
+            border: 2px solid #00bfff;
+            color: #00ffff;
+        }
+        
+        #level-display {
+            color: white;
+            font-size: 18px;
+            text-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+        
+        #sync-indicator {
+            position: absolute;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        #sync-indicator.active {
+            opacity: 1;
+        }
+        
+        #sync-indicator.synced {
+            background: rgba(0, 255, 127, 0.4);
+            border: 2px solid #00ff7f;
+            color: #00ff7f;
+            box-shadow: 0 0 20px rgba(0, 255, 127, 0.5);
+        }
+        
+        #sync-indicator.unsynced {
+            background: rgba(255, 69, 0, 0.4);
+            border: 2px solid #ff4500;
+            color: #ff4500;
+        }
+        
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255,255,255,0.6);
+            font-size: 12px;
+            text-align: center;
+            pointer-events: none;
+        }
+        
+        #mobile-controls {
+            display: none;
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            width: 100%;
+            justify-content: space-between;
+            padding: 0 20px;
+            pointer-events: none;
+        }
+        
+        .control-group {
+            display: flex;
+            gap: 10px;
+            pointer-events: auto;
+        }
+        
+        .control-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.3);
+            background: rgba(255,255,255,0.1);
+            color: white;
+            font-size: 24px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        
+        .control-btn:active {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .control-btn.action {
+            width: 80px;
+            height: 80px;
+            font-size: 14px;
+        }
+        
+        @media (max-width: 768px) {
+            #mobile-controls {
+                display: flex;
+            }
+            #instructions {
+                display: none;
+            }
+        }
+        
+        #win-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        
+        #win-screen h1 {
+            color: #00ff7f;
+            font-size: 48px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 30px rgba(0,255,127,0.8);
+        }
+        
+        #win-screen p {
+            color: white;
+            font-size: 18px;
+            margin-bottom: 30px;
+        }
+        
+        #win-screen button {
+            padding: 15px 40px;
+            font-size: 16px;
+            font-family: 'Orbitron', monospace;
+            background: transparent;
+            border: 2px solid #00ff7f;
+            color: #00ff7f;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.3s;
+        }
+        
+        #win-screen button:hover {
+            background: #00ff7f;
+            color: black;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="ui-overlay">
+            <div class="timeline-indicator timeline-past" id="past-indicator">Past [1]</div>
+            <div id="level-display">Level 1</div>
+            <div class="timeline-indicator timeline-present" id="present-indicator">Present [2]</div>
+        </div>
+        
+        <div id="sync-indicator">SYNC</div>
+        
+        <div id="instructions">
+            [1/2] Switch Timeline &nbsp;|&nbsp; [TAB] Toggle &nbsp;|&nbsp; [WASD/Arrows] Move &nbsp;|&nbsp; [SPACE] Jump &nbsp;|&nbsp; [R] Restart
+        </div>
+        
+        <div id="mobile-controls">
+            <div class="control-group">
+                <button class="control-btn" id="btn-left">◀</button>
+                <button class="control-btn" id="btn-right">▶</button>
+            </div>
+            <div class="control-group">
+                <button class="control-btn" id="btn-switch">SWITCH</button>
+                <button class="control-btn action" id="btn-jump">JUMP</button>
+            </div>
+        </div>
+        
+        <div id="win-screen">
+            <h1>CHRONO SHIFT</h1>
+            <p>You mastered the timelines!</p>
+            <button onclick="restartGame()">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Responsive canvas
+        function resizeCanvas() {
+            const aspect = 16 / 9;
+            let width = window.innerWidth;
+            let height = window.innerHeight;
+            
+            if (width / height > aspect) {
+                width = height * aspect;
+            } else {
+                height = width / aspect;
+            }
+            
+            canvas.width = 1280;
+            canvas.height = 720;
+            canvas.style.width = width + 'px';
+            canvas.style.height = height + 'px';
+        }
+        
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        // Game state
+        let currentLevel = 0;
+        let activeTimeline = 'past'; // 'past' or 'present'
+        let synced = false;
+        
+        // Particles
+        let particles = [];
+        
+        // Player class
+        class Player {
+            constructor(timeline, x, y) {
+                this.timeline = timeline;
+                this.x = x;
+                this.y = y;
+                this.width = 30;
+                this.height = 50;
+                this.vx = 0;
+                this.vy = 0;
+                this.onGround = false;
+                this.color = timeline === 'past' ? '#b8860b' : '#00bfff';
+            }
+            
+            update(platforms) {
+                const gravity = this.timeline === 'past' ? 0.4 : 0.6;
+                const jumpForce = this.timeline === 'past' ? -12 : -14;
+                const speed = this.timeline === 'past' ? 4 : 5;
+                const friction = this.timeline === 'past' ? 0.85 : 0.9;
+                
+                this.vy += gravity;
+                this.vx *= friction;
+                
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                // Platform collision
+                this.onGround = false;
+                for (let plat of platforms) {
+                    if (this.checkCollision(plat)) {
+                        // Landing on top
+                        if (this.vy > 0 && this.y + this.height - this.vy <= plat.y + plat.height * 0.5) {
+                            this.y = plat.y - this.height;
+                            this.vy = 0;
+                            this.onGround = true;
+                        }
+                        // Hitting from below
+                        else if (this.vy < 0 && this.y - this.vy >= plat.y + plat.height * 0.8) {
+                            this.y = plat.y + plat.height;
+                            this.vy = 0;
+                        }
+                        // Side collision
+                        else {
+                            if (this.vx > 0) {
+                                this.x = plat.x - this.width;
+                            } else if (this.vx < 0) {
+                                this.x = plat.x + plat.width;
+                            }
+                            this.vx = 0;
+                        }
+                    }
+                }
+                
+                // Bounds
+                if (this.x < 0) this.x = 0;
+                if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
+                if (this.y > canvas.height) {
+                    this.y = 0;
+                    this.vy = 0;
+                }
+            }
+            
+            checkCollision(plat) {
+                return this.x < plat.x + plat.width &&
+                       this.x + this.width > plat.x &&
+                       this.y < plat.y + plat.height &&
+                       this.y + this.height > plat.y;
+            }
+            
+            draw() {
+                const alpha = activeTimeline === this.timeline ? 1 : 0.4;
+                
+                ctx.save();
+                ctx.globalAlpha = alpha;
+                
+                // Glow effect
+                const gradient = ctx.createRadialGradient(
+                    this.x + this.width/2, this.y + this.height/2, 0,
+                    this.x + this.width/2, this.y + this.height/2, 50
+                );
+                gradient.addColorStop(0, this.color + '40');
+                gradient.addColorStop(1, 'transparent');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(this.x - 20, this.y - 20, this.width + 40, this.height + 40);
+                
+                // Body
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                
+                // Eyes
+                ctx.fillStyle = this.timeline === 'past' ? '#ffd700' : '#00ffff';
+                ctx.fillRect(this.x + 6, this.y + 10, 6, 6);
+                ctx.fillRect(this.x + 18, this.y + 10, 6, 6);
+                
+                // Trail effect when moving
+                if (Math.abs(this.vx) > 2 || Math.abs(this.vy) > 2) {
+                    ctx.globalAlpha = 0.3;
+                    ctx.fillStyle = this.color;
+                    ctx.fillRect(this.x - this.vx * 2, this.y - this.vy * 2, this.width, this.height);
+                }
+                
+                ctx.restore();
+            }
+            
+            jump() {
+                if (this.onGround) {
+                    this.vy = this.timeline === 'past' ? -12 : -14;
+                    this.onGround = false;
+                    
+                    // Spawn particles
+                    for (let i = 0; i < 5; i++) {
+                        particles.push({
+                            x: this.x + this.width/2,
+                            y: this.y + this.height,
+                            vx: (Math.random() - 0.5) * 4,
+                            vy: Math.random() * 2,
+                            life: 30,
+                            color: this.color
+                        });
+                    }
+                }
+            }
+        }
+        
+        // Level definitions
+        const levels = [
+            // Level 1: Tutorial
+            {
+                past: {
+                    platforms: [
+                        { x: 0, y: 600, width: 1280, height: 120 },
+                        { x: 300, y: 480, width: 150, height: 20 },
+                        { x: 550, y: 380, width: 150, height: 20 },
+                        { x: 800, y: 280, width: 150, height: 20 },
+                    ],
+                    playerStart: { x: 50, y: 500 },
+                    exit: { x: 1100, y: 230, width: 60, height: 80 }
+                },
+                present: {
+                    platforms: [
+                        { x: 0, y: 600, width: 1280, height: 120 },
+                        { x: 200, y: 500, width: 100, height: 20 },
+                        { x: 400, y: 420, width: 100, height: 20 },
+                        { x: 600, y: 340, width: 100, height: 20 },
+                        { x: 850, y: 260, width: 100, height: 20 },
+                    ],
+                    playerStart: { x: 50, y: 500 },
+                    exit: { x: 1100, y: 210, width: 60, height: 80 }
+                }
+            },
+            // Level 2: Jump Timing
+            {
+                past: {
+                    platforms: [
+                        { x: 0, y: 600, width: 300, height: 120 },
+                        { x: 400, y: 550, width: 100, height: 20 },
+                        { x: 600, y: 480, width: 100, height: 20 },
+                        { x: 800, y: 400, width: 100, height: 20 },
+                        { x: 1000, y: 320, width: 280, height: 20 },
+                    ],
+                    playerStart: { x: 50, y: 500 },
+                    exit: { x: 1150, y: 260, width: 60, height: 80 }
+                },
+                present: {
+                    platforms: [
+                        { x: 0, y: 600, width: 200, height: 120 },
+                        { x: 300, y: 520, width: 80, height: 20 },
+                        { x: 480, y: 440, width: 80, height: 20 },
+                        { x: 660, y: 360, width: 80, height: 20 },
+                        { x: 850, y: 280, width: 80, height: 20 },
+                        { x: 1050, y: 200, width: 230, height: 20 },
+                    ],
+                    playerStart: { x: 50, y: 500 },
+                    exit: { x: 1150, y: 140, width: 60, height: 80 }
+                }
+            },
+            // Level 3: Sync Gates
+            {
+                past: {
+                    platforms: [
+                        { x: 0, y: 600, width: 400, height: 120 },
+                        { x: 500, y: 520, width: 80, height: 20, sync: true },
+                        { x: 700, y: 440, width: 80, height: 20, sync: true },
+                        { x: 900, y: 360, width: 80, height: 20, sync: true },
+                        { x: 1050, y: 500, width: 230, height: 20 },
+                    ],
+                    playerStart: { x: 50, y: 500 },
+                    exit: { x: 1150, y: 440, width: 60, height: 80 }
+                },
+                present: {
+                    platforms: [
+                        { x: 0, y: 600, width: 200, height: 120 },
+                        { x: 300, y: 520, width: 80, height: 20 },
+                        { x: 500, y: 440, width: 80, height: 20 },
+                        { x: 700, y: 360, width: 80, height: 20 },
+                        { x: 900, y: 280, width: 80, height: 20 },
+                        { x: 1100, y: 200, width: 180, height: 20 },
+                    ],
+                    playerStart: { x: 50, y: 500 },
+                    exit: { x: 1150, y: 140, width: 60, height: 80 }
+                }
+            },
+            // Level 4: Platform Cooperation
+            {
+                past: {
+                    platforms: [
+                        { x: 0, y: 600, width: 300, height: 120 },
+                        { x: 350, y: 500, width: 60, height: 20, toggle: true },
+                        { x: 500, y: 420, width: 60, height: 20 },
+                        { x: 650, y: 340, width: 60, height: 20, toggle: true },
+                        { x: 800, y: 260, width: 60, height: 20 },
+                        { x: 950, y: 340, width: 330, height: 20 },
+                    ],
+                    playerStart: { x: 50, y: 500 },
+                    exit: { x: 1100, y: 280, width: 60, height: 80 }
+                },
+                present: {
+                    platforms: [
+                        { x: 0, y: 600, width: 200, height: 120 },
+                        { x: 250, y: 500, width: 80, height: 20 },
+                        { x: 400, y: 420, width: 80, height: 20, toggle: true },
+                        { x: 550, y: 340, width: 80, height: 20 },
+                        { x: 700, y: 260, width: 80, height: 20, toggle: true },
+                        { x: 900, y: 180, width: 380, height: 20 },
+                    ],
+                    playerStart: { x: 50, y: 500 },
+                    exit: { x: 1100, y: 120, width: 60, height: 80 }
+                }
+            },
+            // Level 5: Final Challenge
+            {
+                past: {
+                    platforms: [
+                        { x: 0, y: 650, width: 200, height: 70 },
+                        { x: 250, y: 550, width: 60, height: 20, sync: true },
+                        { x: 400, y: 470, width: 60, height: 20, toggle: true },
+                        { x: 550, y: 390, width: 60, height: 20, sync: true },
+                        { x: 700, y: 310, width: 60, height: 20, toggle: true },
+                        { x: 850, y: 230, width: 60, height: 20, sync: true },
+                        { x: 1000, y: 300, width: 280, height: 20 },
+                    ],
+                    playerStart: { x: 50, y: 550 },
+                    exit: { x: 1150, y: 240, width: 60, height: 80 }
+                },
+                present: {
+                    platforms: [
+                        { x: 0, y: 650, width: 150, height: 70 },
+                        { x: 200, y: 570, width: 50, height: 20 },
+                        { x: 320, y: 490, width: 50, height: 20, sync: true },
+                        { x: 440, y: 410, width: 50, height: 20 },
+                        { x: 560, y: 330, width: 50, height: 20, sync: true },
+                        { x: 680, y: 250, width: 50, height: 20 },
+                        { x: 800, y: 170, width: 50, height: 20, sync: true },
+                        { x: 950, y: 250, width: 330, height: 20 },
+                    ],
+                    playerStart: { x: 50, y: 550 },
+                    exit: { x: 1150, y: 190, width: 60, height: 80 }
+                }
+            }
+        ];
+        
+        // Current level players
+        let pastPlayer, presentPlayer;
+        
+        function initLevel() {
+            const level = levels[currentLevel];
+            pastPlayer = new Player('past', level.past.playerStart.x, level.past.playerStart.y);
+            presentPlayer = new Player('present', level.present.playerStart.x, level.present.playerStart.y);
+            particles = [];
+            document.getElementById('level-display').textContent = `Level ${currentLevel + 1}`;
+        }
+        
+        // Input handling
+        const keys = {};
+        
+        document.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            
+            if (e.code === 'Digit1' || e.code === 'Numpad1') {
+                activeTimeline = 'past';
+                updateUI();
+            } else if (e.code === 'Digit2' || e.code === 'Numpad2') {
+                activeTimeline = 'present';
+                updateUI();
+            } else if (e.code === 'Tab') {
+                e.preventDefault();
+                activeTimeline = activeTimeline === 'past' ? 'present' : 'past';
+                updateUI();
+            } else if (e.code === 'KeyR') {
+                initLevel();
+            } else if (e.code === 'Space') {
+                e.preventDefault();
+                if (activeTimeline === 'past') {
+                    pastPlayer.jump();
+                } else {
+                    presentPlayer.jump();
+                }
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+        
+        function updateUI() {
+            document.getElementById('past-indicator').classList.toggle('timeline-past', activeTimeline === 'past');
+            document.getElementById('present-indicator').classList.toggle('timeline-present', activeTimeline === 'present');
+        }
+        
+        // Mobile controls
+        const btnLeft = document.getElementById('btn-left');
+        const btnRight = document.getElementById('btn-right');
+        const btnJump = document.getElementById('btn-jump');
+        const btnSwitch = document.getElementById('btn-switch');
+        
+        let mobileLeft = false, mobileRight = false;
+        
+        btnLeft.addEventListener('touchstart', (e) => { e.preventDefault(); mobileLeft = true; });
+        btnLeft.addEventListener('touchend', () => mobileLeft = false);
+        btnRight.addEventListener('touchstart', (e) => { e.preventDefault(); mobileRight = true; });
+        btnRight.addEventListener('touchend', () => mobileRight = false);
+        
+        btnJump.addEventListener('touchstart', (e) => { 
+            e.preventDefault();
+            if (activeTimeline === 'past') pastPlayer.jump();
+            else presentPlayer.jump();
+        });
+        
+        btnSwitch.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            activeTimeline = activeTimeline === 'past' ? 'present' : 'past';
+            updateUI();
+        });
+        
+        function handleMobileInput() {
+            if (mobileLeft) {
+                if (activeTimeline === 'past') pastPlayer.vx = -4;
+                else presentPlayer.vx = -5;
+            }
+            if (mobileRight) {
+                if (activeTimeline === 'past') pastPlayer.vx = 4;
+                else presentPlayer.vx = 5;
+            }
+        }
+        
+        // Game loop
+        function update() {
+            // Keyboard input
+            if (activeTimeline === 'past') {
+                if (keys['ArrowLeft'] || keys['KeyA']) pastPlayer.vx = -4;
+                if (keys['ArrowRight'] || keys['KeyD']) pastPlayer.vx = 4;
+            } else {
+                if (keys['ArrowLeft'] || keys['KeyA']) presentPlayer.vx = -5;
+                if (keys['ArrowRight'] || keys['KeyD']) presentPlayer.vx = 5;
+            }
+            
+            handleMobileInput();
+            
+            // Update players
+            pastPlayer.update(levels[currentLevel].past.platforms);
+            presentPlayer.update(levels[currentLevel].present.platforms);
+            
+            // Check sync
+            const syncThreshold = 50;
+            synced = Math.abs(pastPlayer.x - presentPlayer.x) < syncThreshold;
+            
+            const syncIndicator = document.getElementById('sync-indicator');
+            if (synced) {
+                syncIndicator.classList.add('active', 'synced');
+                syncIndicator.classList.remove('unsynced');
+                syncIndicator.textContent = 'SYNCHRONIZED';
+            } else {
+                syncIndicator.classList.add('active', 'unsynced');
+                syncIndicator.classList.remove('synced');
+                syncIndicator.textContent = 'OUT OF SYNC';
+            }
+            
+            // Update particles
+            particles = particles.filter(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                return p.life > 0;
+            });
+            
+            // Check win condition
+            const level = levels[currentLevel];
+            const pastInExit = pastPlayer.x < level.past.exit.x + level.past.exit.width &&
+                              pastPlayer.x + pastPlayer.width > level.past.exit.x &&
+                              pastPlayer.y < level.past.exit.y + level.past.exit.height &&
+                              pastPlayer.y + pastPlayer.height > level.past.exit.y;
+            
+            const presentInExit = presentPlayer.x < level.present.exit.x + level.present.exit.width &&
+                                 presentPlayer.x + presentPlayer.width > level.present.exit.x &&
+                                 presentPlayer.y < level.present.exit.y + level.present.exit.height &&
+                                 presentPlayer.y + presentPlayer.height > level.present.exit.y;
+            
+            if (pastInExit && presentInExit) {
+                currentLevel++;
+                if (currentLevel >= levels.length) {
+                    document.getElementById('win-screen').style.display = 'flex';
+                } else {
+                    initLevel();
+                }
+            }
+        }
+        
+        function draw() {
+            // Clear with gradient background
+            const bgGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            bgGradient.addColorStop(0, '#0a0a1a');
+            bgGradient.addColorStop(1, '#1a1a2e');
+            ctx.fillStyle = bgGradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw timeline-specific backgrounds
+            drawTimelineBackground('past');
+            drawTimelineBackground('present');
+            
+            // Draw platforms
+            drawPlatforms('past');
+            drawPlatforms('present');
+            
+            // Draw exits
+            drawExit(levels[currentLevel].past.exit, 'past');
+            drawExit(levels[currentLevel].present.exit, 'present');
+            
+            // Draw players
+            pastPlayer.draw();
+            presentPlayer.draw();
+            
+            // Draw particles
+            particles.forEach(p => {
+                ctx.globalAlpha = p.life / 30;
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+            });
+            ctx.globalAlpha = 1;
+            
+            // Draw sync line when synced
+            if (synced) {
+                ctx.strokeStyle = '#9400d3';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([10, 10]);
+                ctx.beginPath();
+                ctx.moveTo(pastPlayer.x + pastPlayer.width/2, pastPlayer.y + pastPlayer.height/2);
+                ctx.lineTo(presentPlayer.x + presentPlayer.width/2, presentPlayer.y + presentPlayer.height/2);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                
+                // Glow effect at sync point
+                const midX = (pastPlayer.x + presentPlayer.x) / 2 + 15;
+                const midY = (pastPlayer.y + presentPlayer.y) / 2 + 25;
+                const glow = ctx.createRadialGradient(midX, midY, 0, midX, midY, 60);
+                glow.addColorStop(0, 'rgba(148, 0, 211, 0.6)');
+                glow.addColorStop(1, 'transparent');
+                ctx.fillStyle = glow;
+                ctx.fillRect(midX - 60, midY - 60, 120, 120);
+            }
+        }
+        
+        function drawTimelineBackground(timeline) {
+            const alpha = activeTimeline === timeline ? 0.15 : 0.05;
+            ctx.fillStyle = timeline === 'past' ? `rgba(184, 134, 11, ${alpha})` : `rgba(0, 191, 255, ${alpha})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Scanlines for present
+            if (timeline === 'present' && activeTimeline === 'present') {
+                ctx.strokeStyle = 'rgba(0, 191, 255, 0.03)';
+                ctx.lineWidth = 1;
+                for (let y = 0; y < canvas.height; y += 4) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(canvas.width, y);
+                    ctx.stroke();
+                }
+            }
+            
+            // Dust particles for past
+            if (timeline === 'past' && activeTimeline === 'past') {
+                ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
+                for (let i = 0; i < 20; i++) {
+                    const x = (Date.now() / 50 + i * 100) % canvas.width;
+                    const y = (i * 37 + Date.now() / 30) % canvas.height;
+                    ctx.fillRect(x, y, 2, 2);
+                }
+            }
+        }
+        
+        function drawPlatforms(timeline) {
+            const level = levels[currentLevel];
+            const alpha = activeTimeline === timeline ? 1 : 0.3;
+            
+            level[timeline].platforms.forEach(plat => {
+                // Platform color based on type
+                let color = timeline === 'past' ? '#8b7355' : '#4a90a4';
+                if (plat.sync) color = synced ? '#00ff7f' : '#ff4500';
+                if (plat.toggle) color = timeline === 'past' ? '#b8860b' : '#00bfff';
+                
+                ctx.globalAlpha = alpha;
+                
+                // Platform shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.fillRect(plat.x + 4, plat.y + 4, plat.width, plat.height);
+                
+                // Platform body
+                ctx.fillStyle = color;
+                ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
+                
+                // Platform highlight
+                ctx.fillStyle = timeline === 'past' ? '#a08060' : '#5aa0b4';
+                ctx.fillRect(plat.x, plat.y, plat.width, 3);
+                
+                // Sync indicator glow
+                if (plat.sync) {
+                    const glowAlpha = synced ? 0.5 : 0.2;
+                    ctx.fillStyle = synced ? `rgba(0, 255, 127, ${glowAlpha})` : `rgba(255, 69, 0, ${glowAlpha})`;
+                    ctx.fillRect(plat.x - 5, plat.y - 5, plat.width + 10, plat.height + 10);
+                }
+                
+                ctx.globalAlpha = 1;
+            });
+        }
+        
+        function drawExit(exit, timeline) {
+            const alpha = activeTimeline === timeline ? 1 : 0.3;
+            ctx.globalAlpha = alpha;
+            
+            // Exit glow
+            const gradient = ctx.createRadialGradient(
+                exit.x + exit.width/2, exit.y + exit.height/2, 0,
+                exit.x + exit.width/2, exit.y + exit.height/2, exit.width
+            );
+            gradient.addColorStop(0, timeline === 'past' ? 'rgba(255, 215, 0, 0.5)' : 'rgba(0, 255, 255, 0.5)');
+            gradient.addColorStop(1, 'transparent');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(exit.x - 20, exit.y - 20, exit.width + 40, exit.height + 40);
+            
+            // Exit portal
+            ctx.fillStyle = timeline === 'past' ? '#ffd700' : '#00ffff';
+            ctx.fillRect(exit.x, exit.y, exit.width, exit.height);
+            
+            // Inner portal
+            ctx.fillStyle = timeline === 'past' ? '#ffec8b' : '#7fffd4';
+            ctx.fillRect(exit.x + 10, exit.y + 10, exit.width - 20, exit.height - 20);
+            
+            ctx.globalAlpha = 1;
+        }
+        
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function restartGame() {
+            currentLevel = 0;
+            document.getElementById('win-screen').style.display = 'none';
+            initLevel();
+        }
+        
+        // Start game
+        initLevel();
+        gameLoop();
+    </script>
+</body>
+</html>
