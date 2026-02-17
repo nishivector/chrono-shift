@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chart Wars</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            overflow: hidden;
+            background: #0a0a0f;
+            font-family: 'Orbitron', monospace;
+        }
+        
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        
+        #ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        #score-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #00ffcc;
+            font-size: 24px;
+            text-shadow: 0 0 20px #00ffcc;
+        }
+        
+        #level-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: #ff00aa;
+            font-size: 20px;
+            text-shadow: 0 0 20px #ff00aa;
+        }
+        
+        #target-display {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #ffff00;
+            font-size: 18px;
+            text-shadow: 0 0 15px #ffff00;
+            text-align: center;
+        }
+        
+        #instructions {
+            position: absolute;
+            bottom: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #888;
+            font-size: 12px;
+            text-align: center;
+        }
+        
+        #win-screen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 255, 204, 0.1);
+            border: 2px solid #00ffcc;
+            padding: 40px 60px;
+            text-align: center;
+            display: none;
+            pointer-events: auto;
+        }
+        
+        #win-screen h1 {
+            color: #00ffcc;
+            font-size: 48px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 30px #00ffcc;
+        }
+        
+        #win-screen button {
+            background: #ff00aa;
+            border: none;
+            color: white;
+            padding: 15px 40px;
+            font-family: 'Orbitron', monospace;
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        #win-screen button:hover {
+            background: #ff44cc;
+            transform: scale(1.1);
+        }
+        
+        #combo-display {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ffff00;
+            font-size: 64px;
+            font-weight: 900;
+            opacity: 0;
+            pointer-events: none;
+            text-shadow: 0 0 40px #ffff00;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+    <div id="ui-overlay">
+        <div id="score-panel">SCORE: <span id="score">0</span></div>
+        <div id="level-panel">LEVEL <span id="level">1</span></div>
+        <div id="target-display">Match the target pattern!</div>
+        <div id="instructions">Click bars to change height • Match target to win</div>
+        <div id="combo-display"></div>
+        <div id="win-screen">
+            <h1>CHART COMPLETE!</h1>
+            <button onclick="nextLevel()">NEXT LEVEL</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Game State
+        let scene, camera, renderer;
+        let bars = [];
+        let targetPattern = [];
+        let currentPattern = [];
+        let score = 0;
+        let level = 1;
+        let combo = 0;
+        let isAnimating = false;
+        
+        const GRID_SIZE = 4;
+        const BAR_SIZE = 1.2;
+        const SPACING = 1.8;
+        const MAX_HEIGHT = 5;
+        const COLORS = [
+            0x00ffcc, 0xff00aa, 0xffff00, 0x00aaff, 
+            0xffaa00, 0xaa00ff, 0xff5555, 0x55ff55
+        ];
+        
+        function init() {
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a0f);
+            scene.fog = new THREE.Fog(0x0a0a0f, 15, 40);
+            
+            // Camera
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(8, 10, 12);
+            camera.lookAt(0, 2, 0);
+            
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('game-container').appendChild(renderer.domElement);
+            
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0x404060, 0.5);
+            scene.add(ambientLight);
+            
+            const mainLight = new THREE.DirectionalLight(0xffffff, 1);
+            mainLight.position.set(10, 20, 10);
+            mainLight.castShadow = true;
+            mainLight.shadow.mapSize.width = 2048;
+            mainLight.shadow.mapSize.height = 2048;
+            scene.add(mainLight);
+            
+            const fillLight = new THREE.DirectionalLight(0x00ffcc, 0.3);
+            fillLight.position.set(-10, 5, -10);
+            scene.add(fillLight);
+            
+            const rimLight = new THREE.PointLight(0xff00aa, 0.5, 30);
+            rimLight.position.set(0, 15, -10);
+            scene.add(rimLight);
+            
+            // Ground plane with grid
+            const gridHelper = new THREE.GridHelper(20, 20, 0x00ffcc, 0x1a1a2e);
+            gridHelper.position.y = 0;
+            scene.add(gridHelper);
+            
+            const groundGeo = new THREE.PlaneGeometry(30, 30);
+            const groundMat = new THREE.MeshStandardMaterial({ 
+                color: 0x0a0a15,
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            // Generate level
+            generateLevel();
+            
+            // Event listeners
+            window.addEventListener('resize', onWindowResize);
+            renderer.domElement.addEventListener('click', onMouseClick);
+            
+            animate();
+        }
+        
+        function generateLevel() {
+            // Clear existing bars
+            bars.forEach(bar => scene.remove(bar));
+            bars = [];
+            
+            // Generate target pattern
+            targetPattern = [];
+            for (let i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
+                targetPattern.push(Math.floor(Math.random() * MAX_HEIGHT) + 1);
+            }
+            
+            // Generate current pattern (with some correct values)
+            currentPattern = [];
+            for (let i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
+                // Give player some correct answers to start
+                if (Math.random() < 0.3 + (level * 0.05)) {
+                    currentPattern.push(targetPattern[i]);
+                } else {
+                    currentPattern.push(Math.floor(Math.random() * MAX_HEIGHT) + 1);
+                }
+            }
+            
+            // Create bars
+            const offset = (GRID_SIZE - 1) * SPACING / 2;
+            
+            for (let z = 0; z < GRID_SIZE; z++) {
+                for (let x = 0; x < GRID_SIZE; x++) {
+                    const index = z * GRID_SIZE + x;
+                    const height = currentPattern[index];
+                    createBar(x, z, height, index, offset);
+                }
+            }
+            
+            // Show target in UI
+            updateTargetDisplay();
+            
+            // Reset combo
+            combo = 0;
+        }
+        
+        function createBar(gridX, gridZ, height, index, offset) {
+            const geometry = new THREE.BoxGeometry(BAR_SIZE, height, BAR_SIZE);
+            const colorIndex = index % COLORS.length;
+            const material = new THREE.MeshStandardMaterial({
+                color: COLORS[colorIndex],
+                roughness: 0.3,
+                metalness: 0.7,
+                emissive: COLORS[colorIndex],
+                emissiveIntensity: 0.1
+            });
+            
+            const bar = new THREE.Mesh(geometry, material);
+            bar.position.x = gridX * SPACING - offset;
+            bar.position.y = height / 2;
+            bar.position.z = gridZ * SPACING - offset;
+            bar.castShadow = true;
+            bar.receiveShadow = true;
+            bar.userData = { index, targetHeight: targetPattern[index] };
+            
+            scene.add(bar);
+            bars.push(bar);
+        }
+        
+        function updateBarHeight(bar, newHeight, animate = true) {
+            const index = bar.userData.index;
+            currentPattern[index] = newHeight;
+            
+            if (animate) {
+                isAnimating = true;
+                const startHeight = bar.scale.y;
+                const targetScale = newHeight;
+                const duration = 300;
+                const startTime = Date.now();
+                
+                function animateHeight() {
+                    const elapsed = Date.now() - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    const eased = 1 - Math.pow(1 - progress, 3);
+                    
+                    bar.scale.y = startHeight + (targetScale - startHeight) * eased;
+                    bar.position.y = (bar.scale.y * bar.geometry.parameters.height) / 2;
+                    
+                    if (progress < 1) {
+                        requestAnimationFrame(animateHeight);
+                    } else {
+                        isAnimating = false;
+                        checkWin();
+                    }
+                }
+                animateHeight();
+            } else {
+                bar.scale.y = newHeight;
+                bar.position.y = newHeight * bar.geometry.parameters.height / 2;
+            }
+        }
+        
+        function cycleBarHeight(bar) {
+            if (isAnimating) return;
+            
+            const index = bar.userData.index;
+            let newHeight = currentPattern[index] + 1;
+            if (newHeight > MAX_HEIGHT) newHeight = 1;
+            
+            // Combo system
+            if (newHeight === bar.userData.targetHeight) {
+                combo++;
+                if (combo > 1) showCombo(combo);
+                score += 10 * combo;
+            } else {
+                combo = 0;
+            }
+            
+            updateScore();
+            updateBarHeight(bar, newHeight);
+        }
+        
+        function checkWin() {
+            const isWin = currentPattern.every((h, i) => h === targetPattern[i]);
+            
+            if (isWin) {
+                score += 100 * level;
+                updateScore();
+                showWinScreen();
+            }
+        }
+        
+        function showCombo(count) {
+            const display = document.getElementById('combo-display');
+            display.textContent = `${count}x COMBO!`;
+            display.style.opacity = '1';
+            display.style.transform = 'translate(-50%, -50%) scale(1.2)';
+            
+            setTimeout(() => {
+                display.style.transition = 'all 0.5s';
+                display.style.opacity = '0';
+                display.style.transform = 'translate(-50%, -50%) scale(0.5)';
+            }, 500);
+        }
+        
+        function showWinScreen() {
+            document.getElementById('win-screen').style.display = 'block';
+        }
+        
+        function nextLevel() {
+            document.getElementById('win-screen').style.display = 'none';
+            level++;
+            document.getElementById('level').textContent = level;
+            generateLevel();
+        }
+        
+        function updateScore() {
+            document.getElementById('score').textContent = score;
+        }
+        
+        function updateTargetDisplay() {
+            const targetStr = targetPattern.join(' | ');
+            document.getElementById('target-display').textContent = 
+                `Target: [${targetStr}]`;
+        }
+        
+        function onMouseClick(event) {
+            const mouse = new THREE.Vector2();
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mouse, camera);
+            
+            const intersects = raycaster.intersectObjects(bars);
+            
+            if (intersects.length > 0) {
+                cycleBarHeight(intersects[0].object);
+            }
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        let time = 0;
+        function animate() {
+            requestAnimationFrame(animate);
+            time += 0.01;
+            
+            // Gentle camera orbit
+            const orbitRadius = 14;
+            const orbitSpeed = 0.1;
+            camera.position.x = Math.sin(time * orbitSpeed) * orbitRadius;
+            camera.position.z = Math.cos(time * orbitSpeed) * orbitRadius;
+            camera.lookAt(0, 2, 0);
+            
+            // Pulse bars based on correctness
+            bars.forEach((bar, i) => {
+                const isCorrect = currentPattern[i] === bar.userData.targetHeight;
+                const pulseIntensity = isCorrect ? 0.3 : 0.1;
+                bar.material.emissiveIntensity = pulseIntensity + Math.sin(time * 3 + i) * 0.1;
+            });
+            
+            renderer.render(scene, camera);
+        }
+        
+        init();
+    </script>
+</body>
+</html>
