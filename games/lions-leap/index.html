@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lion's Leap</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap');
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+    touch-action: none;
+            font-family: 'Fredoka', sans-serif;
+            background: linear-gradient(135deg, #1a0a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            color: white;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #ff6b6b, #feca57, #ff9ff3);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 30px rgba(255, 107, 107, 0.3);
+        }
+        
+        #game-container {
+            position: relative;
+            width: 900px;
+            height: 500px;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 
+                        0 0 100px rgba(255, 107, 107, 0.1);
+        }
+        
+        canvas { display: block; }
+        
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 30px;
+            pointer-events: none;
+        }
+        
+        .ui-box {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-size: 1.2rem;
+            backdrop-filter: blur(10px);
+        }
+        
+        #charge-bar {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 300px;
+            height: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            overflow: hidden;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        
+        #charge-bar.charging { opacity: 1; }
+        
+        #charge-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #00d2ff, #3a7bd5);
+            border-radius: 10px;
+            transition: width 0.05s;
+        }
+        
+        #message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 2rem;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            text-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+        }
+        
+        #message.show { opacity: 1; }
+        
+        #instructions {
+            margin-top: 20px;
+            font-size: 1.1rem;
+            opacity: 0.8;
+        }
+        
+        .win { color: #2ed573 !important; }
+        .lose { color: #ff4757 !important; }
+    </style>
+</head>
+<body>
+    <h1>🦁 Lion's Leap</h1>
+    <div id="game-container">
+        <div id="ui">
+            <div class="ui-box">Level: <span id="level">1</span>/5</div>
+            <div class="ui-box">Attempts: <span id="attempts">0</span></div>
+        </div>
+        <div id="charge-bar"><div id="charge-fill"></div></div>
+        <div id="message"></div>
+    </div>
+    <p id="instructions">Hold SPACE or CLICK to charge, release to push the cub! 🐱</p>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Game State
+        const state = {
+            level: 1,
+            attempts: 0,
+            charging: false,
+            charge: 0,
+            cubLaunched: false,
+            cub: null,
+            lioness: null,
+            platforms: [],
+            water: null
+        };
+
+        // Level configs
+        const levels = [
+            { gap: 3, platformWidth: 2, startY: 0, endY: 0 },
+            { gap: 4, platformWidth: 1.8, startY: 0, endY: 0.5 },
+            { gap: 5, platformWidth: 1.5, startY: 0.5, endY: 0 },
+            { gap: 5.5, platformWidth: 1.3, startY: 0, endY: -0.5 },
+            { gap: 6, platformWidth: 1.2, startY: -0.5, endY: 0.5 }
+        ];
+
+        // Three.js Setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(60, 900 / 500, 0.1, 1000);
+        camera.position.set(0, 3, 12);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(900, 500);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.getElementById('game-container').appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffecd2, 0.6);
+        scene.add(ambientLight);
+
+        const sunLight = new THREE.DirectionalLight(0xff6b6b, 1);
+        sunLight.position.set(5, 10, 5);
+        scene.add(sunLight);
+
+        const fillLight = new THREE.DirectionalLight(0x6b5bff, 0.3);
+        fillLight.position.set(-5, 5, -5);
+        scene.add(fillLight);
+
+        // Background gradient
+        const bgGeom = new THREE.PlaneGeometry(50, 30);
+        const bgMat = new THREE.ShaderMaterial({
+            uniforms: {
+                color1: { value: new THREE.Color(0xff6b6b) },
+                color2: { value: new THREE.Color(0xfeca57) },
+                color3: { value: new THREE.Color(0xff9ff3) }
+            },
+            vertexShader: `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform vec3 color1;
+                uniform vec3 color2;
+                uniform vec3 color3;
+                varying vec2 vUv;
+                void main() {
+                    vec3 c = mix(color1, color2, vUv.y);
+                    c = mix(c, color3, vUv.x * 0.5);
+                    gl_FragColor = vec4(c, 1.0);
+                }
+            `
+        });
+        const bg = new THREE.Mesh(bgGeom, bgMat);
+        bg.position.z = -10;
+        scene.add(bg);
+
+        // Create lioness
+        function createLioness() {
+            const group = new THREE.Group();
+            
+            // Body
+            const bodyGeom = new THREE.BoxGeometry(1.2, 0.8, 0.8);
+            const bodyMat = new THREE.MeshLambertMaterial({ color: 0xd4a574 });
+            const body = new THREE.Mesh(bodyGeom, bodyMat);
+            group.add(body);
+            
+            // Head
+            const headGeom = new THREE.BoxGeometry(0.7, 0.6, 0.6);
+            const head = new THREE.Mesh(headGeom, bodyMat);
+            head.position.set(0.7, 0.3, 0);
+            group.add(head);
+            
+            // Mane
+            const maneGeom = new THREE.BoxGeometry(0.9, 0.9, 0.9);
+            const maneMat = new THREE.MeshLambertMaterial({ color: 0x8b4513 });
+            const mane = new THREE.Mesh(maneGeom, maneMat);
+            mane.position.set(0.6, 0.4, 0);
+            group.add(mane);
+            
+            // Eyes
+            const eyeGeom = new THREE.SphereGeometry(0.08, 8, 8);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+            const eye1 = new THREE.Mesh(eyeGeom, eyeMat);
+            eye1.position.set(1.0, 0.4, 0.2);
+            group.add(eye1);
+            const eye2 = new THREE.Mesh(eyeGeom, eyeMat);
+            eye2.position.set(1.0, 0.4, -0.2);
+            group.add(eye2);
+            
+            group.position.set(-4, 1.5, 0);
+            return group;
+        }
+
+        // Create cub
+        function createCub() {
+            const group = new THREE.Group();
+            
+            // Body
+            const bodyGeom = new THREE.SphereGeometry(0.4, 16, 16);
+            const bodyMat = new THREE.MeshLambertMaterial({ color: 0xf5deb3 });
+            const body = new THREE.Mesh(bodyGeom, bodyMat);
+            group.add(body);
+            
+            // Head
+            const headGeom = new THREE.SphereGeometry(0.3, 16, 16);
+            const head = new THREE.Mesh(headGeom, bodyMat);
+            head.position.set(0.35, 0.15, 0);
+            group.add(head);
+            
+            // Ears
+            const earGeom = new THREE.ConeGeometry(0.1, 0.2, 8);
+            const earMat = new THREE.MeshLambertMaterial({ color: 0xd4a574 });
+            const ear1 = new THREE.Mesh(earGeom, earMat);
+            ear1.position.set(0.3, 0.5, 0.15);
+            group.add(ear1);
+            const ear2 = new THREE.Mesh(earGeom, earMat);
+            ear2.position.set(0.3, 0.5, -0.15);
+            group.add(ear2);
+            
+            // Eyes - BIG and cute
+            const eyeGeom = new THREE.SphereGeometry(0.1, 16, 16);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+            const eyeWhite = new THREE.SphereGeometry(0.12, 16, 16);
+            const eyeWhiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            
+            const eye1w = new THREE.Mesh(eyeWhite, eyeWhiteMat);
+            eye1w.position.set(0.55, 0.25, 0.12);
+            group.add(eye1w);
+            const eye1 = new THREE.Mesh(eyeGeom, eyeMat);
+            eye1.position.set(0.58, 0.25, 0.14);
+            group.add(eye1);
+            
+            const eye2w = new THREE.Mesh(eyeWhite, eyeWhiteMat);
+            eye2w.position.set(0.55, 0.25, -0.12);
+            group.add(eye2w);
+            const eye2 = new THREE.Mesh(eyeGeom, eyeMat);
+            eye2.position.set(0.58, 0.25, -0.14);
+            group.add(eye2);
+            
+            // Nose
+            const noseGeom = new THREE.SphereGeometry(0.06, 8, 8);
+            const noseMat = new THREE.MeshLambertMaterial({ color: 0x2d1810 });
+            const nose = new THREE.Mesh(noseGeom, noseMat);
+            nose.position.set(0.65, 0.1, 0);
+            group.add(nose);
+            
+            return group;
+        }
+
+        // Create platform
+        function createPlatform(x, width, y) {
+            const geom = new THREE.BoxGeometry(width, 0.5, 2);
+            const mat = new THREE.MeshLambertMaterial({ color: 0x8b7355 });
+            const platform = new THREE.Mesh(geom, mat);
+            platform.position.set(x, y, 0);
+            return platform;
+        }
+
+        // Create water
+        function createWater() {
+            const geom = new THREE.PlaneGeometry(20, 4);
+            const mat = new THREE.MeshLambertMaterial({ 
+                color: 0x1e90ff,
+                transparent: true,
+                opacity: 0.7
+            });
+            const water = new THREE.Mesh(geom, mat);
+            water.rotation.x = -Math.PI / 2;
+            water.position.set(0, -1, 0);
+            return water;
+        }
+
+        // Particles for splash/land
+        const particles = [];
+        function createParticle(x, y, color) {
+            const geom = new THREE.SphereGeometry(0.1, 8, 8);
+            const mat = new THREE.MeshBasicMaterial({ color });
+            const p = new THREE.Mesh(geom, mat);
+            p.position.set(x, y, 0);
+            p.velocity = new THREE.Vector3(
+                (Math.random() - 0.5) * 0.3,
+                Math.random() * 0.3,
+                (Math.random() - 0.5) * 0.3
+            );
+            p.life = 1;
+            scene.add(p);
+            particles.push(p);
+        }
+
+        // Load level
+        function loadLevel(levelIndex) {
+            // Clear existing
+            if (state.lioness) scene.remove(state.lioness);
+            if (state.cub) scene.remove(state.cub);
+            state.platforms.forEach(p => scene.remove(p));
+            state.platforms = [];
+            if (state.water) scene.remove(state.water);
+            
+            particles.forEach(p => scene.remove(p));
+            particles.length = 0;
+            
+            const config = levels[Math.min(levelIndex, levels.length - 1)];
+            
+            // Create lioness
+            state.lioness = createLioness();
+            state.lioness.position.x = -4;
+            state.lioness.position.y = config.startY + 1;
+            scene.add(state.lioness);
+            
+            // Create platforms
+            const startPlat = createPlatform(-3.5, 2, config.startY);
+            const endPlat = createPlatform(-3.5 + 2 + config.gap, config.platformWidth, config.endY);
+            scene.add(startPlat);
+            scene.add(endPlat);
+            state.platforms.push(startPlat, endPlat);
+            
+            // Create cub on start platform
+            state.cub = createCub();
+            state.cub.position.set(-3, config.startY + 0.5, 0);
+            scene.add(state.cub);
+            
+            // Create water
+            state.water = createWater();
+            scene.add(state.water);
+            
+            // Reset state
+            state.cubLaunched = false;
+            state.cubVelocity = new THREE.Vector3(0, 0, 0);
+            state.charge = 0;
+            
+            // Update UI
+            document.getElementById('level').textContent = levelIndex + 1;
+            document.getElementById('charge-bar').classList.remove('charging');
+            document.getElementById('charge-fill').style.width = '0%';
+            hideMessage();
+        }
+
+        // Show message
+        function showMessage(text, className) {
+            const msg = document.getElementById('message');
+            msg.textContent = text;
+            msg.className = 'show ' + className;
+        }
+        
+        function hideMessage() {
+            document.getElementById('message').className = '';
+        }
+
+        // Launch cub
+        function launchCub() {
+            if (state.cubLaunched) return;
+            
+            const power = state.charge / 100;
+            state.cubVelocity = new THREE.Vector3(
+                power * 0.4 + 0.15,
+                power * 0.35 + 0.1,
+                0
+            );
+            state.cubLaunched = true;
+            state.attempts++;
+            document.getElementById('attempts').textContent = state.attempts;
+        }
+
+        // Check collision
+        function checkCollision() {
+            const cubPos = state.cub.position;
+            const config = levels[Math.min(state.level - 1, levels.length - 1)];
+            
+            // Check if fell in water
+            if (cubPos.y < -0.5) {
+                // Splash particles
+                for (let i = 0; i < 10; i++) {
+                    createParticle(cubPos.x, -0.5, 0x1e90ff);
+                }
+                showMessage('Splash! Try again 🐱', 'lose');
+                setTimeout(() => loadLevel(state.level - 1), 1500);
+                return;
+            }
+            
+            // Check landing on end platform
+            const endPlatX = -3.5 + 2 + config.gap;
+            const endPlatY = config.endY + 0.25;
+            const platWidth = config.platformWidth;
+            
+            if (cubPos.x > endPlatX - platWidth/2 && 
+                cubPos.x < endPlatX + platWidth/2 &&
+                cubPos.y < endPlatY + 0.5 && cubPos.y > endPlatY - 0.5) {
+                
+                // Landed!
+                for (let i = 0; i < 15; i++) {
+                    createParticle(cubPos.x, cubPos.y, 0xfeca57);
+                }
+                
+                if (state.level >= 5) {
+                    showMessage('🎉 You Win! 🎉', 'win');
+                    setTimeout(() => {
+                        state.level = 1;
+                        state.attempts = 0;
+                        loadLevel(0);
+                    }, 3000);
+                } else {
+                    showMessage('Great job! Next level... ⭐', 'win');
+                    setTimeout(() => {
+                        state.level++;
+                        loadLevel(state.level - 1);
+                    }, 1500);
+                }
+            }
+            
+            // Check out of bounds
+            if (cubPos.x > 10 || cubPos.x < -10) {
+                showMessage('Too far! Try again 🐱', 'lose');
+                setTimeout(() => loadLevel(state.level - 1), 1500);
+            }
+        }
+
+        // Animation loop
+        let lastTime = 0;
+        function animate(time) {
+            requestAnimationFrame(animate);
+            
+            const dt = Math.min((time - lastTime) / 1000, 0.1);
+            lastTime = time;
+            
+            // Charging
+            if (state.charging && !state.cubLaunched) {
+                state.charge = Math.min(state.charge + 80 * dt, 100);
+                document.getElementById('charge-fill').style.width = state.charge + '%';
+                
+                // Squish cub while charging
+                state.cub.scale.y = 1 - (state.charge / 200);
+                state.cub.scale.x = 1 + (state.charge / 200);
+            }
+            
+            // Cub physics
+            if (state.cubLaunched) {
+                state.cub.position.add(state.cubVelocity);
+                state.cubVelocity.y -= 0.8 * dt; // gravity
+                
+                // Rotate cub while flying
+                state.cub.rotation.z -= 0.1;
+                
+                checkCollision();
+            }
+            
+            // Animate water
+            if (state.water) {
+                state.water.position.y = -1 + Math.sin(time * 0.002) * 0.05;
+            }
+            
+            // Animate lioness
+            if (state.lioness) {
+                state.lioness.children[0].rotation.y = Math.sin(time * 0.003) * 0.1;
+            }
+            
+            // Update particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.position.add(p.velocity);
+                p.velocity.y -= 0.01;
+                p.life -= dt * 2;
+                p.scale.setScalar(p.life);
+                
+                if (p.life <= 0) {
+                    scene.remove(p);
+                    particles.splice(i, 1);
+                }
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        // Input handlers
+        function startCharge(e) {
+            e.preventDefault();
+            if (!state.cubLaunched) {
+                state.charging = true;
+                document.getElementById('charge-bar').classList.add('charging');
+            }
+        }
+        
+        function endCharge(e) {
+            e.preventDefault();
+            if (state.charging) {
+                state.charging = false;
+                document.getElementById('charge-bar').classList.remove('charging');
+                launchCub();
+            }
+        }
+
+        document.addEventListener('mousedown', startCharge);
+        document.addEventListener('mouseup', endCharge);
+        document.addEventListener('touchstart', startCharge);
+        document.addEventListener('touchend', endCharge);
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && !e.repeat) {
+                e.preventDefault();
+                startCharge(e);
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                endCharge(e);
+            }
+        });
+
+        // Initialize
+        loadLevel(0);
+        animate(0);
+    </script>
+</body>
+</html>
