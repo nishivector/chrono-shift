@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Orange You Glad</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Bangers&family=Patrick+Hand&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            overflow: hidden;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            font-family: 'Patrick Hand', cursive;
+            touch-action: none;
+            user-select: none;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        canvas {
+            display: block;
+        }
+        
+        .ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 20px;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        .score-display {
+            font-family: 'Bangers', cursive;
+            font-size: 32px;
+            color: #ffa500;
+            text-shadow: 3px 3px 0 #ff6b00, -1px -1px 0 #000;
+        }
+        
+        .level-display {
+            font-family: 'Bangers', cursive;
+            font-size: 24px;
+            color: #fff;
+            text-shadow: 2px 2px 0 #000;
+        }
+        
+        .title-screen, .game-over-screen, .level-complete-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 100;
+            pointer-events: auto;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        h1 {
+            font-family: 'Bangers', cursive;
+            font-size: 64px;
+            color: #ffa500;
+            text-shadow: 4px 4px 0 #ff6b00, 6px 6px 0 #000;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .subtitle {
+            font-size: 24px;
+            color: #ccc;
+            margin-bottom: 40px;
+            text-align: center;
+        }
+        
+        .btn {
+            font-family: 'Bangers', cursive;
+            font-size: 28px;
+            padding: 15px 40px;
+            margin: 10px;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.1s;
+            pointer-events: auto;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(180deg, #ffa500 0%, #ff6b00 100%);
+            color: #fff;
+            box-shadow: 0 6px 0 #cc5500, 0 8px 10px rgba(0,0,0,0.3);
+        }
+        
+        .btn-primary:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #cc5500, 0 4px 5px rgba(0,0,0,0.3);
+        }
+        
+        .btn-secondary {
+            background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            box-shadow: 0 6px 0 #5a3d8a, 0 8px 10px rgba(0,0,0,0.3);
+        }
+        
+        .btn-secondary:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #5a3d8a, 0 4px 5px rgba(0,0,0,0.3);
+        }
+        
+        .instructions {
+            color: #aaa;
+            font-size: 18px;
+            margin-top: 30px;
+            text-align: center;
+            max-width: 80%;
+        }
+        
+        .final-score {
+            font-family: 'Bangers', cursive;
+            font-size: 48px;
+            color: #ffa500;
+            margin: 20px 0;
+        }
+        
+        .fun-fact {
+            background: rgba(255, 165, 0, 0.1);
+            border: 2px solid #ffa500;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px;
+            max-width: 400px;
+        }
+        
+        .fun-fact-title {
+            color: #ffa500;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div class="ui-overlay">
+            <div class="score-display">Score: <span id="score">0</span></div>
+            <div class="level-display" style="text-align: right;">Level: <span id="level">1</span></div>
+        </div>
+        
+        <div class="title-screen" id="titleScreen">
+            <h1>🍊 Orange You Glad</h1>
+            <p class="subtitle">Why are orange ball pit balls always broken?</p>
+            <button class="btn btn-primary" id="startBtn">PLAY</button>
+            <p class="instructions">
+                Tap/Click to catch the falling orange balls!<br>
+                Avoid the other colors.<br>
+                Orange balls give +10 points.
+            </p>
+            <div class="fun-fact">
+                <div class="fun-fact-title">🔬 Scientific Fact:</div>
+                <div>Orange balls in ball pits do break more often! They're typically older and exposed to more wear.</div>
+            </div>
+        </div>
+        
+        <div class="game-over-screen hidden" id="gameOverScreen">
+            <h1>Game Over!</h1>
+            <div class="final-score">Score: <span id="finalScore">0</span></div>
+            <button class="btn btn-primary" id="restartBtn">PLAY AGAIN</button>
+            <button class="btn btn-secondary" id="menuBtn">MAIN MENU</button>
+        </div>
+        
+        <div class="level-complete-screen hidden" id="levelCompleteScreen">
+            <h1>Level Complete!</h1>
+            <p class="subtitle">Get ready for level <span id="nextLevel">2</span></p>
+            <button class="btn btn-primary" id="continueBtn">CONTINUE</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // UI Elements
+        const titleScreen = document.getElementById('titleScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const levelCompleteScreen = document.getElementById('levelCompleteScreen');
+        const scoreDisplay = document.getElementById('score');
+        const levelDisplay = document.getElementById('level');
+        const finalScoreDisplay = document.getElementById('finalScore');
+        const nextLevelDisplay = document.getElementById('nextLevel');
+        
+        // Game state
+        let gameRunning = false;
+        let score = 0;
+        let level = 1;
+        let balls = [];
+        let player = { x: 0, y: 0, width: 80, height: 20 };
+        let lastTime = 0;
+        let spawnTimer = 0;
+        
+        // Colors
+        const ballColors = [
+            { color: '#ffa500', name: 'orange', points: 10 },  // Target
+            { color: '#ff4444', name: 'red', points: -20 },
+            { color: '#44ff44', name: 'green', points: -10 },
+            { color: '#4444ff', name: 'blue', points: -10 },
+            { color: '#ffff44', name: 'yellow', points: -5 },
+            { color: '#ff44ff', name: 'purple', points: -5 }
+        ];
+        
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            player.y = canvas.height - 60;
+            player.x = canvas.width / 2 - player.width / 2;
+        }
+        
+        window.addEventListener('resize', resize);
+        resize();
+        
+        // Touch/Mouse control
+        function handleInput(x) {
+            if (!gameRunning) return;
+            player.x = Math.max(0, Math.min(canvas.width - player.width, x - player.width / 2));
+        }
+        
+        canvas.addEventListener('mousemove', (e) => handleInput(e.clientX));
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            handleInput(e.touches[0].clientX);
+        }, { passive: false });
+        
+        canvas.addEventListener('click', (e) => handleInput(e.clientX));
+        
+        // Buttons
+        document.getElementById('startBtn').addEventListener('click', startGame);
+        document.getElementById('restartBtn').addEventListener('click', startGame);
+        document.getElementById('menuBtn').addEventListener('click', () => {
+            gameOverScreen.classList.add('hidden');
+            titleScreen.classList.remove('hidden');
+        });
+        document.getElementById('continueBtn').addEventListener('click', continueLevel);
+        
+        function startGame() {
+            score = 0;
+            level = 1;
+            balls = [];
+            gameRunning = true;
+            titleScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            levelCompleteScreen.classList.add('hidden');
+            updateUI();
+            lastTime = performance.now();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function continueLevel() {
+            levelCompleteScreen.classList.add('hidden');
+            gameRunning = true;
+            lastTime = performance.now();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function updateUI() {
+            scoreDisplay.textContent = score;
+            levelDisplay.textContent = level;
+        }
+        
+        function spawnBall() {
+            const isOrange = Math.random() < 0.25; // 25% orange
+            let colorInfo;
+            
+            if (isOrange) {
+                colorInfo = ballColors[0];
+            } else {
+                colorInfo = ballColors[Math.floor(Math.random() * (ballColors.length - 1)) + 1];
+            }
+            
+            balls.push({
+                x: Math.random() * (canvas.width - 40) + 20,
+                y: -30,
+                radius: 20 + Math.random() * 15,
+                speed: 2 + level * 0.5 + Math.random() * 2,
+                color: colorInfo.color,
+                points: colorInfo.points,
+                name: colorInfo.name,
+                wobble: Math.random() * Math.PI * 2,
+                rotation: Math.random() * Math.PI * 2
+            });
+        }
+        
+        function update(dt) {
+            if (!gameRunning) return;
+            
+            // Spawn balls
+            spawnTimer += dt;
+            const spawnRate = Math.max(500, 1500 - level * 150);
+            if (spawnTimer > spawnRate) {
+                spawnBall();
+                spawnTimer = 0;
+            }
+            
+            // Update balls
+            for (let i = balls.length - 1; i >= 0; i--) {
+                const ball = balls[i];
+                ball.y += ball.speed;
+                ball.wobble += 0.1;
+                ball.x += Math.sin(ball.wobble) * 0.5;
+                ball.rotation += 0.05;
+                
+                // Check collision with player
+                if (ball.y + ball.radius > player.y && 
+                    ball.y - ball.radius < player.y + player.height &&
+                    ball.x > player.x && 
+                    ball.x < player.x + player.width) {
+                    
+                    score += ball.points;
+                    if (score < 0) score = 0;
+                    updateUI();
+                    
+                    // Create particle effect
+                    createParticles(ball.x, ball.y, ball.color);
+                    
+                    balls.splice(i, 1);
+                    continue;
+                }
+                
+                // Remove off-screen balls
+                if (ball.y > canvas.height + 50) {
+                    balls.splice(i, 1);
+                }
+            }
+            
+            // Level complete check
+            if (score >= level * 50) {
+                gameRunning = false;
+                nextLevelDisplay.textContent = level + 1;
+                levelCompleteScreen.classList.remove('hidden');
+            }
+            
+            // Game over check - too many missed orange balls would be harder
+            // For now, just keep playing
+        }
+        
+        // Particle system
+        let particles = [];
+        
+        function createParticles(x, y, color) {
+            for (let i = 0; i < 10; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: (Math.random() - 0.5) * 8,
+                    radius: Math.random() * 5 + 2,
+                    color: color,
+                    life: 1
+                });
+            }
+        }
+        
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.2; // gravity
+                p.life -= 0.03;
+                
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+        
+        function draw() {
+            // Background gradient
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#1a1a2e');
+            gradient.addColorStop(0.5, '#16213e');
+            gradient.addColorStop(1, '#0f3460');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw ball pit style circles in background
+            ctx.globalAlpha = 0.1;
+            for (let i = 0; i < 20; i++) {
+                const x = (i * 137) % canvas.width;
+                const y = (i * 89) % canvas.height;
+                const r = 30 + (i * 7) % 50;
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI * 2);
+                ctx.fillStyle = ballColors[i % ballColors.length].color;
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+            
+            // Draw player (basket/catcher)
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.moveTo(player.x, player.y);
+            ctx.lineTo(player.x + player.width, player.y);
+            ctx.lineTo(player.x + player.width - 10, player.y + player.height);
+            ctx.lineTo(player.x + 10, player.y + player.height);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.strokeStyle = '#ffa500';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            // Draw balls
+            balls.forEach(ball => {
+                ctx.save();
+                ctx.translate(ball.x, ball.y);
+                ctx.rotate(ball.rotation);
+                
+                // Ball gradient
+                const ballGrad = ctx.createRadialGradient(-ball.radius * 0.3, -ball.radius * 0.3, 0, 0, 0, ball.radius);
+                ballGrad.addColorStop(0, lightenColor(ball.color, 50));
+                ballGrad.addColorStop(0.7, ball.color);
+                ballGrad.addColorStop(1, darkenColor(ball.color, 30));
+                
+                ctx.beginPath();
+                ctx.arc(0, 0, ball.radius, 0, Math.PI * 2);
+                ctx.fillStyle = ballGrad;
+                ctx.fill();
+                
+                // Shine
+                ctx.beginPath();
+                ctx.arc(-ball.radius * 0.3, -ball.radius * 0.3, ball.radius * 0.3, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255,255,255,0.4)';
+                ctx.fill();
+                
+                // Border
+                ctx.strokeStyle = darkenColor(ball.color, 50);
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                ctx.restore();
+            });
+            
+            // Draw particles
+            particles.forEach(p => {
+                ctx.globalAlpha = p.life;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fillStyle = p.color;
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+        }
+        
+        function lightenColor(color, percent) {
+            const num = parseInt(color.replace('#', ''), 16);
+            const amt = Math.round(2.55 * percent);
+            const R = Math.min(255, (num >> 16) + amt);
+            const G = Math.min(255, ((num >> 8) & 0x00FF) + amt);
+            const B = Math.min(255, (num & 0x0000FF) + amt);
+            return '#' + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
+        }
+        
+        function darkenColor(color, percent) {
+            const num = parseInt(color.replace('#', ''), 16);
+            const amt = Math.round(2.55 * percent);
+            const R = Math.max(0, (num >> 16) - amt);
+            const G = Math.max(0, ((num >> 8) & 0x00FF) - amt);
+            const B = Math.max(0, (num & 0x0000FF) - amt);
+            return '#' + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
+        }
+        
+        function gameLoop(timestamp) {
+            const dt = timestamp - lastTime;
+            lastTime = timestamp;
+            
+            update(dt);
+            updateParticles();
+            draw();
+            
+            if (gameRunning) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+        
+        // Initial draw
+        draw();
+    </script>
+</body>
+</html>
